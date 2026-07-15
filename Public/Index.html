@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>blop bmber</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, 'Courier New', monospace;
+    background: #111;
+    color: #eee;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container {
+    max-width: 1200px;
+    width: 100%;
+  }
+  h1 {
+    margin-bottom: 16px;
+    color: #00ff66;
+    font-size: 24px;
+    text-align: center;
+    letter-spacing: 2px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .controls input, .controls button {
+    padding: 10px 14px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: none;
+    background: #222;
+    color: #eee;
+    border: 1px solid #333;
+  }
+  .controls input {
+    flex: 1;
+    min-width: 140px;
+  }
+  .controls input:focus {
+    outline: none;
+    border-color: #00ff66;
+  }
+  #goBtn {
+    background: #4a90e2;
+    color: #fff;
+    cursor: pointer;
+    border: none;
+  }
+  #goBtn:hover { background: #357abd; }
+  #startBtn {
+    background: #00ff66;
+    color: #000;
+    cursor: pointer;
+    border: none;
+    font-weight: bold;
+  }
+  #startBtn:hover:not(:disabled) { background: #00cc55; }
+  #startBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #stopBtn {
+    background: #ff3355;
+    color: #fff;
+    cursor: pointer;
+    border: none;
+    font-weight: bold;
+  }
+  #stopBtn:hover:not(:disabled) { background: #cc2244; }
+  #stopBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #888;
+    background: #1a1a1a;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+  }
+  #stats { flex: 1; }
+  #viewer {
+    width: 100%;
+    height: 60vh;
+    border: 2px solid #2a2a2a;
+    border-radius: 6px;
+    background: #fff;
+    min-height: 300px;
+  }
+  #log {
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    border: 1px solid #2a2a2a;
+    margin-top: 10px;
+    font-family: monospace;
+  }
+  #log div { padding: 2px 0; border-bottom: 1px solid #222; }
+  .success { color: #00ff66; }
+  .failed { color: #ff3355; }
+  .info { color: #ffaa00; }
+  .timestamp { color: #555; margin-right: 6px; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #111; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  @media (max-width: 600px) {
+    .controls { flex-direction: column; }
+    .controls input, .controls button { width: 100%; }
+    #viewer { height: 40vh; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📱 blop bmber</h1>
+
+  <div class="controls">
+    <input type="text" id="urlInput" placeholder="Enter URL, e.g. https://example.com" value="https://tinder.com">
+    <button id="goBtn">Go</button>
+    <input type="tel" id="phoneInput" placeholder="Phone number" value="6199176403">
+    <button id="startBtn">▶ Bomb</button>
+    <button id="stopBtn" disabled>■ Stop</button>
+  </div>
+
+  <div class="status-row">
+    <span id="stats">● Ready</span>
+  </div>
+
+  <iframe id="viewer" src=""></iframe>
+
+  <div id="log"></div>
+</div>
+
+<script>
+  // --- URL Loader ---
+  const urlInput = document.getElementById('urlInput');
+  const goBtn = document.getElementById('goBtn');
+  const frame = document.getElementById('viewer');
+
+  function loadSite() {
+    let url = urlInput.value.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    frame.src = url;
+  }
+  goBtn.addEventListener('click', loadSite);
+  urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadSite(); });
+
+  // --- SMS Bomber ---
+  const phoneInput = document.getElementById('phoneInput');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const stats = document.getElementById('stats');
+  const log = document.getElementById('log');
+
+  let running = false;
+  let eventSource = null;
+  let startTime = 0;
+
+  function addLog(msg, type = 'info') {
+    const div = document.createElement('div');
+    div.className = type;
+    const time = new Date().toLocaleTimeString();
+    div.innerHTML = `<span class="timestamp">[${time}]</span> ${msg}`;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    if (log.children.length > 200) log.removeChild(log.firstChild);
+  }
+
+  function updateStats(success, failed, total) {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const secs = String(elapsed % 60).padStart(2, '0');
+    stats.textContent = `📊 ${success} success, ${failed} failed | ⏱ ${mins}:${secs} | ${total} sites`;
+  }
+
+  function startBomb() {
+    const phone = phoneInput.value.trim();
+    if (!phone || phone.length < 7) {
+      alert('Enter a valid phone number');
+      return;
+    }
+
+    running = true;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    log.innerHTML = '';
+    startTime = Date.now();
+    addLog('🚀 Starting bomb for ' + phone, 'info');
+    stats.textContent = '⏳ Running...';
+
+    const es = new EventSource('/api/stream?phone=' + encodeURIComponent(phone) + '&t=' + Date.now());
+    eventSource = es;
+
+    let success = 0, failed = 0, total = 0;
+
+    es.onmessage = function(event) {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'result') {
+          total++;
+          if (data.result.status === 'success') {
+            success++;
+            addLog('✅ ' + data.result.site + ': sent', 'success');
+          } else {
+            failed++;
+            addLog('❌ ' + data.result.site + ': fail' + (data.result.error ? ' - ' + data.result.error : ''), 'failed');
+          }
+          updateStats(success, failed, total);
+        } else if (data.type === 'complete') {
+          addLog('✅ Bomb complete!', 'success');
+          stats.textContent = '📊 ' + data.results.success + ' success, ' + data.results.failed + ' failed | ⏱ Complete';
+          running = false;
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          es.close();
+        } else if (data.type === 'error') {
+          addLog('⚠️ ' + data.error, 'failed');
+        }
+      } catch(e) {}
+    };
+
+    es.onerror = function() {
+      if (running) {
+        addLog('⚠️ Connection lost', 'failed');
+      }
+    };
+  }
+
+  function stopBomb() {
+    if (!running) return;
+    fetch('/api/stop?phone=' + encodeURIComponent(phoneInput.value.trim()), { method: 'POST' }).catch(() => {});
+    addLog('⏹ Stopped by user', 'info');
+    running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    if (eventSource) { eventSource.close(); eventSource = null; }
+    stats.textContent = '● Stopped';
+  }
+
+  startBtn.addEventListener('click', startBomb);
+  stopBtn.addEventListener('click', stopBomb);
+
+  window.addEventListener('beforeunload', function() {
+    if (running) {
+      fetch('/api/stop?phone=' + encodeURIComponent(phoneInput.value.trim()), { method: 'POST' }).catch(() => {});
+    }
+  });
+</script>
+</body>
+</html>
